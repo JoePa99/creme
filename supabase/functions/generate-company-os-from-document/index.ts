@@ -1,6 +1,7 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.55.0';
+import { generateEmbeddings } from '../_shared/embedding-config.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -708,6 +709,80 @@ serve(async (req) => {
       console.log('🏢 [COMPANY-OS-DOC] Created new CompanyOS');
       }
 
+      // Step 8: Generate embeddings for the full document text (for vector search during chat)
+      console.log('🏢 [COMPANY-OS-DOC] Starting embedding generation for document search...');
+      try {
+        // Use additionalContext which contains the full extracted text
+        if (additionalContext && additionalContext.trim().length > 0) {
+          console.log('🏢 [COMPANY-OS-DOC] Generating embeddings for', additionalContext.length, 'characters');
+
+          const embeddings = await generateEmbeddings(additionalContext, openaiApiKey);
+          console.log(`🏢 [COMPANY-OS-DOC] Generated ${embeddings.length} embeddings for document chunks`);
+
+          // Delete any existing embeddings for this company's CompanyOS document
+          const { error: deleteError } = await supabaseServiceClient
+            .from('documents')
+            .delete()
+            .eq('company_id', companyId)
+            .eq('document_type', 'company_os');
+
+          if (deleteError) {
+            console.warn('🏢 [COMPANY-OS-DOC] Warning: Failed to delete old CompanyOS embeddings:', deleteError);
+          } else {
+            console.log('🏢 [COMPANY-OS-DOC] Cleaned up old CompanyOS embeddings');
+          }
+
+          // Store each chunk with its embedding
+          const chunkSize = 1000; // Characters per chunk
+          const overlap = 50; // Character overlap between chunks
+
+          for (let i = 0; i < embeddings.length; i++) {
+            const startIndex = Math.max(0, i * chunkSize - (i > 0 ? overlap : 0));
+            const endIndex = Math.min((i + 1) * chunkSize, additionalContext.length);
+            const chunkContent = additionalContext.substring(startIndex, endIndex);
+
+            // Skip empty or very short chunks
+            if (chunkContent.trim().length < 10) {
+              console.log(`🏢 [COMPANY-OS-DOC] Skipping chunk ${i + 1} (too short: ${chunkContent.trim().length} chars)`);
+              continue;
+            }
+
+            const { error: insertError } = await supabaseServiceClient
+              .from('documents')
+              .insert({
+                company_id: companyId,
+                content: chunkContent,
+                embedding: embeddings[i],
+                agent_id: null, // null = accessible by all agents in company
+                document_archive_id: null,
+                document_type: 'company_os', // Tag as CompanyOS document
+                metadata: {
+                  chunk_index: i,
+                  total_chunks: embeddings.length,
+                  source: 'company_os_document',
+                  file_name: fileName,
+                  created_at: new Date().toISOString()
+                }
+              });
+
+            if (insertError) {
+              console.warn(`🏢 [COMPANY-OS-DOC] Warning: Failed to store chunk ${i + 1}:`, insertError);
+            } else {
+              if ((i + 1) % 10 === 0 || i === embeddings.length - 1) {
+                console.log(`🏢 [COMPANY-OS-DOC] Stored embedding chunk ${i + 1}/${embeddings.length}`);
+              }
+            }
+          }
+
+          console.log('🏢 [COMPANY-OS-DOC] ✅ Successfully embedded CompanyOS document for vector search!');
+        } else {
+          console.warn('🏢 [COMPANY-OS-DOC] No document text available for embedding generation');
+        }
+      } catch (embeddingError) {
+        console.error('🏢 [COMPANY-OS-DOC] Error generating embeddings (non-fatal):', embeddingError);
+        // Don't fail the whole operation if embedding fails - CompanyOS JSON is the critical part
+      }
+
     } finally {
       // Cleanup OpenAI resources
       if (openAIFileId) {
@@ -720,8 +795,16 @@ serve(async (req) => {
 
     const executionTime = Date.now() - startTime;
 
+    // Count how many embeddings were created
+    const { count: embeddingCount } = await supabaseServiceClient
+      .from('documents')
+      .select('*', { count: 'exact', head: true })
+      .eq('company_id', companyId)
+      .eq('document_type', 'company_os');
+
     console.log('🏢 [COMPANY-OS-DOC] Generation completed successfully');
     console.log(`🏢 [COMPANY-OS-DOC] Execution time: ${executionTime}ms`);
+    console.log(`🏢 [COMPANY-OS-DOC] Document chunks embedded: ${embeddingCount || 0}`);
 
     return new Response(JSON.stringify({
       success: true,
@@ -731,7 +814,9 @@ serve(async (req) => {
         sourceType: 'document_upload',
         generated_at: new Date().toISOString(),
         execution_time: executionTime,
-        model: 'openai_assistants_api'
+        model: 'openai_assistants_api',
+        embeddings_created: embeddingCount || 0,
+        document_text_length: additionalContext?.length || 0
       }
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
