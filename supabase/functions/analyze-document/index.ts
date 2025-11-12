@@ -112,9 +112,9 @@ async function analyzeWithGemini(
   userMessage: string,
   model: string
 ): Promise<DocumentAnalysis> {
-  const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
-  if (!lovableApiKey) {
-    throw new Error('Lovable API key (for Gemini) not configured');
+  const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
+  if (!geminiApiKey) {
+    throw new Error('Gemini API key not configured');
   }
 
   console.log('📄 [Gemini] Analyzing document:', documentName);
@@ -141,28 +141,23 @@ Provide your analysis in the following JSON format:
 
 Ensure all fields are populated with meaningful content. The detailedAnalysis should be thorough and well-structured.`;
 
-  const geminiModel = model.includes('gemini') ? model : 'google/gemini-2.0-flash-exp';
+  const geminiModel = model.includes('gemini') ? model : 'gemini-2.0-flash-exp';
 
-  const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${geminiApiKey}`, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${lovableApiKey}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: geminiModel,
-      messages: [
-        {
-          role: 'system',
-          content: 'You are an expert document analyst. Always respond with valid JSON matching the requested structure.'
-        },
-        {
-          role: 'user',
-          content: analysisPrompt
-        }
-      ],
-      temperature: 0.7,
-      max_tokens: 3000,
+      contents: [{
+        parts: [{
+          text: analysisPrompt
+        }]
+      }],
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 3000,
+      }
     }),
   });
 
@@ -173,7 +168,7 @@ Ensure all fields are populated with meaningful content. The detailedAnalysis sh
   }
 
   const data = await response.json();
-  const content = data.choices[0].message.content;
+  const content = data.candidates[0].content.parts[0].text;
   
   // Gemini might wrap JSON in markdown code blocks, so extract it
   let jsonContent = content;
