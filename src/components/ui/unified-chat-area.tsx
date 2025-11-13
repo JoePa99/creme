@@ -16,6 +16,7 @@ import { ChatInput } from "./chat-input";
 import { ChatHeader } from "./chat-header";
 import { WelcomeDashboard } from "./welcome-dashboard";
 import { ImageGenerationModal } from "./image-generation-modal";
+import { chatWithAgent, chatWithAgentChannel } from "@/lib/function-adapters";
 
 interface FileAttachment {
   name: string;
@@ -817,15 +818,13 @@ export function UnifiedChatArea({ agentId, channelId }: UnifiedChatAreaProps) {
 
     try {
       console.log('🔍 [DEBUG] Sending agent message with payload:', { message: userMessage, agent_id: agent.id, attachments, client_message_id: clientMessageId });
-      const { data, error } = await supabase.functions.invoke('chat-with-agent', {
-        body: {
-          message: userMessage,
-          agent_id: agent.id,
-          conversation_id: conversation.id,
-          user_id: user.id,
-          attachments,
-          client_message_id: clientMessageId
-        }
+      const { data, error } = await chatWithAgent({
+        message: userMessage,
+        agent_id: agent.id,
+        conversation_id: conversation.id,
+        user_id: user.id,
+        attachments,
+        client_message_id: clientMessageId
       });
 
       if (error) throw error;
@@ -927,13 +926,11 @@ export function UnifiedChatArea({ agentId, channelId }: UnifiedChatAreaProps) {
       if (firstAgent) {
         try {
           console.log('🔍 [DEBUG] Calling chat-with-agent-channel with payload:', { message: userMessage, agent_id: firstAgent.agentId, channel_id: channelId, attachments });
-          const { data, error: agentError } = await supabase.functions.invoke('chat-with-agent-channel', {
-            body: {
-              message: userMessage,
-              agent_id: firstAgent.agentId,
-              channel_id: channelId,
-              attachments: attachments
-            }
+          const { data, error: agentError } = await chatWithAgentChannel({
+            message: userMessage,
+            agent_id: firstAgent.agentId,
+            channel_id: channelId,
+            attachments: attachments
           });
 
           if (agentError) {

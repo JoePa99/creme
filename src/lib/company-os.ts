@@ -1,8 +1,9 @@
 import { supabase } from '@/integrations/supabase/client';
-import type { 
-  CompanyOS, 
-  CompanyOSData, 
-  GenerateCompanyOSRequest, 
+import { processCompanyOSDocument } from '@/lib/function-adapters';
+import type {
+  CompanyOS,
+  CompanyOSData,
+  GenerateCompanyOSRequest,
   GenerateCompanyOSFromDocumentRequest,
   ExtractDocumentTextRequest,
   ExtractDocumentTextResponse,
@@ -43,14 +44,18 @@ export async function generateCompanyOS(
 }
 
 /**
- * Extract text from a document (Step 1 of two-step process)
+ * Extract text from a document and process it with embeddings
+ * Uses the new clean architecture document-processor function
  */
 export async function extractDocumentText(
   request: ExtractDocumentTextRequest
 ): Promise<ExtractDocumentTextResponse> {
   try {
-    const { data, error } = await supabase.functions.invoke('extract-document-text', {
-      body: request
+    // NEW: Use document-processor for clean architecture
+    const { data, error } = await processCompanyOSDocument({
+      companyId: request.companyId,
+      filePath: request.filePath,
+      fileName: request.fileName,
     });
 
     if (error) {
@@ -58,12 +63,15 @@ export async function extractDocumentText(
     }
 
     if (!data.success) {
-      throw new Error(data.error || 'Failed to extract text from document');
+      throw new Error(data.error || 'Failed to process document');
     }
 
-    return data as ExtractDocumentTextResponse;
+    return {
+      success: true,
+      text: data.chunks_created ? `Processed ${data.chunks_created} chunks` : 'Success',
+    };
   } catch (error) {
-    console.error('Error extracting document text:', error);
+    console.error('Error processing document:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error occurred'
