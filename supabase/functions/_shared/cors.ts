@@ -4,7 +4,8 @@ const ALLOWED_ORIGINS = [
   'http://localhost:5173',
   'http://localhost:3000',
   'https://znpbeicliyymvyoaojzz.supabase.co',
-  // Add your production domains here
+  'https://creme-phi.vercel.app',
+  'https://creme-bt13y0x8j-joepa99s-projects.vercel.app', // Preview deployments
 ];
 
 /**
