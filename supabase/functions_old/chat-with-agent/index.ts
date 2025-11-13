@@ -569,21 +569,32 @@ async function processUserMessage(
           // Process Supabase results (existing logic)
           if (supabaseResults.data && supabaseResults.data.length > 0) {
             console.log(`Found ${supabaseResults.data.length} Supabase documents`);
+
+            // Check how many are from CompanyOS vs regular documents
+            const companyOSDocs = supabaseResults.data.filter((doc: any) =>
+              doc.metadata?.document_type === 'company_os' || doc.metadata?.source === 'company_os_document'
+            );
+            const regularDocs = supabaseResults.data.length - companyOSDocs.length;
+
+            console.log(`📊 [CONTEXT] Retrieved ${companyOSDocs.length} CompanyOS chunks and ${regularDocs} regular document chunks`);
+
             const maxContentLength = supabaseResults.data.length <= 3 ? 20000 : 10000;
             const supabaseDocs = supabaseResults.data.map((doc: any) => {
-              const trimmedContent = doc.content.length > maxContentLength 
-                ? doc.content.substring(0, maxContentLength) + '...' 
+              const trimmedContent = doc.content.length > maxContentLength
+                ? doc.content.substring(0, maxContentLength) + '...'
                 : doc.content;
+              const docType = doc.metadata?.document_type || doc.metadata?.source || 'uploaded';
               return {
                 source: 'supabase',
-                fileName: doc.file_name,
+                fileName: doc.file_name || doc.metadata?.file_name || 'Unknown',
                 content: trimmedContent,
-                similarity: doc.similarity
+                similarity: doc.similarity,
+                type: docType
               };
             });
-            
-            contextData += supabaseDocs.map(doc => 
-              `Source: Supabase Document\nDocument: ${doc.fileName}\nContent: ${doc.content}\nSimilarity: ${doc.similarity.toFixed(3)}`
+
+            contextData += supabaseDocs.map(doc =>
+              `Source: ${doc.type === 'company_os' || doc.type === 'company_os_document' ? 'CompanyOS Document' : 'Supabase Document'}\nDocument: ${doc.fileName}\nContent: ${doc.content}\nSimilarity: ${doc.similarity.toFixed(3)}`
             ).join('\n\n---\n\n');
             console.log('Retrieved relevant documents from Supabase vector search');
           } else {
