@@ -133,3 +133,12 @@ verify_jwt = true
 
 [functions.ai-provider-service]
 verify_jwt = true
+
+[functions.document-processor]
+verify_jwt = true
+
+[functions.context-retriever]
+verify_jwt = true
+
+[functions.chat-handler]
+verify_jwt = true
