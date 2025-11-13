@@ -33,6 +33,9 @@ site_url = "http://localhost:3000"
 additional_redirect_urls = ["https://chaeznzfvbgrpzvxwvyu.supabase.co"]
 
 # Clean Architecture - Phase 1 Edge Functions
+[functions.test-deploy]
+verify_jwt = false
+
 [functions.document-processor]
 verify_jwt = true
 
